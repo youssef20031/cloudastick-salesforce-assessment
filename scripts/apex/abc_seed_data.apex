@@ -152,11 +152,16 @@ List<Order> orders = new List<Order>{
         Pricebook2Id = standardPricebook.Id, Description = 'E - delivered over a year ago, the batch archives this one')
 };
 
+// Written through put() rather than as orders[1].CreatedDate = ... on purpose.
+// While "Set Audit Fields upon Record Creation" is switched off, CreatedDate is
+// not writeable and the static form does not even compile, so the script would
+// be unusable in exactly the org state it is meant to detect. Dynamic field
+// access compiles either way and the guard above decides at run time.
 if (canBackdate) {
-    orders[1].CreatedDate = System.now().addDays(-45);
-    orders[2].CreatedDate = System.now().addDays(-3);
-    orders[3].CreatedDate = System.now().addDays(-30);
-    orders[4].CreatedDate = System.now().addDays(-400);
+    orders[1].put('CreatedDate', System.now().addDays(-45));
+    orders[2].put('CreatedDate', System.now().addDays(-3));
+    orders[3].put('CreatedDate', System.now().addDays(-30));
+    orders[4].put('CreatedDate', System.now().addDays(-400));
 }
 insert orders;
 
