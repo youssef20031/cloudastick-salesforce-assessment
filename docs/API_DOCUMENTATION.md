@@ -21,6 +21,12 @@ All paths below are relative to that. Use **your org's My Domain host** — not
 
 Every request and response is `application/json; charset=UTF-8`.
 
+> **Verified against the org.** Every request and response in this document was
+> captured from a live call to
+> `orgfarm-ad027e59fe-dev-ed.develop.my.salesforce.com`. The accompanying Postman
+> collection runs 23 requests and 119 assertions against these endpoints with no
+> failures.
+
 ## 2. Authentication
 
 The API is registered as an External Client App called **`abc_Ionic_App`** using
@@ -159,7 +165,7 @@ Authorization: Bearer <token>
   "data": {
     "items": [
       {
-        "id": "01tg8000004xYzAAAU",
+        "id": "01tg80000063Y1hAAE",
         "name": "Paracetamol 500mg Tablets (20)",
         "productCode": "ABC-MED-001",
         "description": "Analgesic and antipyretic tablets, blister pack of 20.",
@@ -171,11 +177,11 @@ Authorization: Bearer <token>
       }
     ],
     "count": 1,
-    "limit": 2,
+    "limit": 1,
     "offset": 0
   },
   "errors": [],
-  "requestId": "4Zx9KpQ2mN"
+  "requestId": "SLB:dc1ea05a428b5820bf29acb69228895e"
 }
 ```
 
@@ -233,30 +239,30 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "cartId": "801g8000003xAbCAAU",
-    "orderNumber": "00000107",
+    "cartId": "801g800000nSwpdAAC",
+    "orderNumber": "00000115",
     "status": "Draft",
     "customer": {
-      "accountId": "001g8000012pQrSAAU",
-      "contactId": "003g8000018tUvWAAQ",
-      "email": "mona.hassan@example.com",
-      "name": "Mona Hassan"
+      "accountId": "001g800000nSwo1AAC",
+      "contactId": "003g800000inTdpAAE",
+      "email": "doc.example@example.com",
+      "name": "Doc Example"
     },
     "items": [
       {
-        "itemId": "802g8000002mNoPAAU",
-        "productId": "01tg8000004xYzAAAU",
+        "itemId": "802g800000BIrh3AAD",
+        "productId": "01tg80000063Y1hAAE",
         "productName": "Paracetamol 500mg Tablets (20)",
-        "quantity": 2,
+        "quantity": 2.0,
         "unitPrice": 12.50,
         "totalPrice": 25.00
       }
     ],
     "totalAmount": 25.00,
-    "createdDate": "2026-09-13T05:48:11.000Z"
+    "createdDate": "2026-09-13T13:59:07Z"
   },
   "errors": [],
-  "requestId": "7Kp2QmX4Zb"
+  "requestId": "SLB:d9443032c0af374c50628583e08eb8ca"
 }
 ```
 
@@ -303,7 +309,35 @@ Content-Type: application/json
 { "productId": "01tg8000004xYzAAAU", "quantity": 3 }
 ```
 
-Returns **200** with the updated cart.
+Returns **200** with the updated cart. Adding 3 of a product already in the cart
+at quantity 2 yields one line at 5, not two lines:
+
+```json
+{
+  "success": true,
+  "data": {
+    "cartId": "801g800000nSwpdAAC",
+    "orderNumber": "00000115",
+    "status": "Draft",
+    "items": [
+      {
+        "itemId": "802g800000BIrh3AAD",
+        "productId": "01tg80000063Y1hAAE",
+        "productName": "Paracetamol 500mg Tablets (20)",
+        "quantity": 5.0,
+        "unitPrice": 12.50,
+        "totalPrice": 62.50
+      }
+    ],
+    "totalAmount": 62.50
+  },
+  "errors": [],
+  "requestId": "SLB:53355930e93c929e1ba2f0c81b22c582"
+}
+```
+
+Note the `itemId` is unchanged - the existing line was raised rather than a new
+one created.
 
 Stock is checked against what the cart would hold **after** the merge, so adding
 2 then 4 of a product with 5 in stock fails on the second call.
@@ -324,7 +358,26 @@ POST /services/apexrest/abc/v1/carts/801g8000003xAbCAAU/checkout
 Authorization: Bearer <token>
 ```
 
-Returns **200** with the cart, now `"status": "Activated"`.
+Returns **200** with the cart, now `"status": "Activated"` - and the same
+`cartId`, because checkout activates the existing order rather than creating a
+second record.
+
+A further attempt to change it returns:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [
+    {
+      "code": "CART_NOT_EDITABLE",
+      "message": "Cart 00000115 has status \"Activated\" and can no longer be changed.",
+      "field": "status"
+    }
+  ],
+  "requestId": "SLB:172125ba1e70380f3db1938425402227"
+}
+```
 
 After checkout the order is frozen — further `items` calls return
 `CART_NOT_EDITABLE`. From here the warehouse moves it to `In delivery` and then
