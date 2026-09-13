@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Requires_Prescription__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Marks a product that may only be dispensed against a valid prescription. Returned by the products API so the Ionic app can prompt the customer to upload one.</description>
+    <externalId>false</externalId>
+    <label>Requires Prescription</label>
+    <trackTrending>false</trackTrending>
+    <type>Checkbox</type>
+</CustomField>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Timestamp__c</fullName>
+    <description>Moment the entry was raised in Apex. Preferred over CreatedDate, which records when the platform event was consumed.</description>
+    <externalId>false</externalId>
+    <label>Timestamp</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>DateTime</type>
+</CustomField>

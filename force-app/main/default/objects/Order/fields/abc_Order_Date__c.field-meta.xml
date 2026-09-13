@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Order_Date__c</fullName>
+    <defaultValue>TODAY()</defaultValue>
+    <description>The date the customer placed the order. This is the "Order Date" the archival batch ages against: Delivered orders whose Order Date is more than one year old are moved into abc_Order_Archive__b. Deliberately distinct from the standard EffectiveDate, which is the date the order takes commercial effect.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Date the customer placed this order. Drives the one-year archival rule.</inlineHelpText>
+    <label>Order Date</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Date</type>
+</CustomField>

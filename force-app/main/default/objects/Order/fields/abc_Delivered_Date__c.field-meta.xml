@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Delivered_Date__c</fullName>
+    <description>Date the order was handed to the customer. Stamped automatically by the abc_Order_Set_Delivered_Date flow when Status first becomes Delivered.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Set automatically when the order status becomes Delivered.</inlineHelpText>
+    <label>Delivered Date</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Date</type>
+</CustomField>

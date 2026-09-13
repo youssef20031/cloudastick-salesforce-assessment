@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Order_Number__c</fullName>
+    <description>Human readable order number from the deleted Order record. Second index field, so the pair (Order Date, Order Number) is unique per archived order and re-running the batch is idempotent.</description>
+    <label>Order Number</label>
+    <length>30</length>
+    <required>true</required>
+    <type>Text</type>
+</CustomField>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Archived_On__c</fullName>
+    <description>When the batch wrote this row. Distinguishes the archival run from the order lifecycle.</description>
+    <label>Archived On</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Recent_Errors</fullName>
+    <columns>NAME</columns>
+    <columns>abc_Timestamp__c</columns>
+    <columns>abc_Level__c</columns>
+    <columns>abc_Source__c</columns>
+    <columns>abc_Class__c</columns>
+    <columns>abc_Method__c</columns>
+    <columns>abc_Http_Status__c</columns>
+    <columns>abc_Message__c</columns>
+    <columns>abc_Request_Id__c</columns>
+    <filterScope>Everything</filterScope>
+    <filters>
+        <field>abc_Level__c</field>
+        <operation>equals</operation>
+        <value>ERROR,WARN</value>
+    </filters>
+    <label>abc Recent Errors</label>
+</ListView>

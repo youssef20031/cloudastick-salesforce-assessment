@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Timestamp__c</fullName>
+    <description>Moment the entry was raised, captured in Apex rather than at insert time so buffered entries keep their real ordering.</description>
+    <externalId>false</externalId>
+    <label>Timestamp</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>

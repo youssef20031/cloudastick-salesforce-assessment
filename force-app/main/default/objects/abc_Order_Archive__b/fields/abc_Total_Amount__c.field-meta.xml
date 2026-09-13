@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Total_Amount__c</fullName>
+    <description>Order total at the moment of archiving. Number rather than Currency because big objects do not support the Currency type.</description>
+    <label>Total Amount</label>
+    <precision>16</precision>
+    <required>false</required>
+    <scale>2</scale>
+    <type>Number</type>
+</CustomField>

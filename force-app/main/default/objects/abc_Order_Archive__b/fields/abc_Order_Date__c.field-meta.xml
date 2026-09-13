@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Order_Date__c</fullName>
+    <description>Date the customer placed the order, copied from Order.abc_Order_Date__c. First index field, sorted descending so the newest archived orders read first. Stored as DateTime because big objects do not support the Date type.</description>
+    <label>Order Date</label>
+    <required>true</required>
+    <type>DateTime</type>
+</CustomField>

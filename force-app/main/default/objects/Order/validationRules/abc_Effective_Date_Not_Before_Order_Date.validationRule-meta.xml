@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Effective_Date_Not_Before_Order_Date</fullName>
+    <active>true</active>
+    <description>An order cannot take effect before the customer placed it. Both dates are shown to the warehouse user, so an inverted pair would be visibly wrong on the Visualforce console.</description>
+    <errorConditionFormula>NOT(ISBLANK(EffectiveDate)) &amp;&amp; NOT(ISBLANK(abc_Order_Date__c)) &amp;&amp; EffectiveDate &lt; abc_Order_Date__c</errorConditionFormula>
+    <errorDisplayField>EffectiveDate</errorDisplayField>
+    <errorMessage>Order Start Date (effective date) cannot be earlier than the Order Date.</errorMessage>
+</ValidationRule>

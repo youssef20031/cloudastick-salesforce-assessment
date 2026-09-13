@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Stock_Quantity_Not_Negative</fullName>
+    <active>true</active>
+    <description>A warehouse can never hold a negative number of units. Guards manual edits and the stock decrement performed by abc_OrderTriggerHandler.</description>
+    <errorConditionFormula>abc_Stock_Quantity__c &lt; 0</errorConditionFormula>
+    <errorDisplayField>abc_Stock_Quantity__c</errorDisplayField>
+    <errorMessage>Stock Quantity cannot be negative.</errorMessage>
+</ValidationRule>

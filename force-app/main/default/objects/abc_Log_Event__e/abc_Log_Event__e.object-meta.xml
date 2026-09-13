@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Transport for the ABC logging framework. abc_Logger buffers these events and publishes them with EventBus.publish; abc_LogEventTrigger turns each one into an abc_Log__c record. Declared PublishImmediately so that a log raised inside a transaction that later rolls back is still delivered - which is exactly the case you most need the log for.</description>
+    <eventType>HighVolume</eventType>
+    <label>abc Log Event</label>
+    <pluralLabel>abc Log Events</pluralLabel>
+    <publishBehavior>PublishImmediately</publishBehavior>
+</CustomObject>

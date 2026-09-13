@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Index xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Order_Archive_Index</fullName>
+    <label>abc Order Archive Index</label>
+    <fields>
+        <name>abc_Order_Date__c</name>
+        <sortDirection>DESC</sortDirection>
+    </fields>
+    <fields>
+        <name>abc_Order_Number__c</name>
+        <sortDirection>ASC</sortDirection>
+    </fields>
+</Index>

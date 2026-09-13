@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Logged_By__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>User whose context raised the entry, resolved from the event payload by abc_LogEventTriggerHandler.</description>
+    <externalId>false</externalId>
+    <label>Logged By</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>abc Logs</relationshipLabel>
+    <relationshipName>abc_Logs</relationshipName>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Lookup</type>
+</CustomField>

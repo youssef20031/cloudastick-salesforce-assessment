@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Category__c</fullName>
+    <description>Merchandising category used to group the catalogue in the Ionic app. Exposed as the `category` filter on GET /abc/v1/products.</description>
+    <externalId>false</externalId>
+    <label>Category</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Medicine</fullName>
+                <default>true</default>
+                <label>Medicine</label>
+            </value>
+            <value>
+                <fullName>Supplement</fullName>
+                <default>false</default>
+                <label>Supplement</label>
+            </value>
+            <value>
+                <fullName>Personal Care</fullName>
+                <default>false</default>
+                <label>Personal Care</label>
+            </value>
+            <value>
+                <fullName>Medical Device</fullName>
+                <default>false</default>
+                <label>Medical Device</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

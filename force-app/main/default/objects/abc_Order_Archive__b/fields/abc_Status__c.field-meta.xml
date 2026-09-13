@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>abc_Status__c</fullName>
+    <description>Order status at the moment of archiving - always Delivered under the current rule, stored explicitly so the rule can widen later.</description>
+    <label>Status</label>
+    <length>40</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>
