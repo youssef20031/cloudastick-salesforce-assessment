@@ -1,0 +1,16 @@
+{
+  "name": "abc-pharmacy-salesforce",
+  "private": true,
+  "version": "1.0.0",
+  "description": "ABC Pharmacy - Cloudastick Salesforce Entry Assessment",
+  "scripts": {
+    "prettier": "prettier --write \"**/*.{cls,component,json,md,page,trigger,xml}\"",
+    "prettier:verify": "prettier --check \"**/*.{cls,component,json,md,page,trigger,xml}\"",
+    "docs": "powershell -ExecutionPolicy Bypass -File scripts/build-docs.ps1"
+  },
+  "devDependencies": {
+    "@prettier/plugin-xml": "^3.4.1",
+    "prettier": "^3.5.3",
+    "prettier-plugin-apex": "^2.2.6"
+  }
+}
