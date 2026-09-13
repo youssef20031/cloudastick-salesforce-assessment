@@ -1,0 +1,74 @@
+erDiagram
+    ACCOUNT ||--o{ CONTACT : "has"
+    ACCOUNT ||--o{ ORDER : "places"
+    CONTACT ||--o{ ORDER : "BillToContactId"
+    ORDER ||--o{ ORDERITEM : "contains"
+    PRICEBOOK2 ||--o{ PRICEBOOKENTRY : "prices"
+    PRODUCT2 ||--o{ PRICEBOOKENTRY : "priced as"
+    PRICEBOOKENTRY ||--o{ ORDERITEM : "sold as"
+    ORDER ||..|| ABC_ORDER_ARCHIVE : "archived to (no FK)"
+    USER ||--o{ ABC_LOG : "abc_Logged_By__c"
+    ABC_LOG_EVENT ||..|| ABC_LOG : "trigger persists"
+
+    ACCOUNT {
+        string Name "customer"
+    }
+    CONTACT {
+        string Email "API identity"
+        string Phone
+        lookup AccountId
+    }
+    PRODUCT2 {
+        string Name
+        string ProductCode
+        boolean IsActive
+        number abc_Stock_Quantity__c
+        boolean abc_Requires_Prescription__c
+        picklist abc_Category__c
+    }
+    PRICEBOOK2 {
+        string Name "standard only"
+        boolean IsStandard
+    }
+    PRICEBOOKENTRY {
+        currency UnitPrice
+        boolean IsActive
+    }
+    ORDER {
+        string OrderNumber
+        picklist Status "Draft-InDelivery-Delivered"
+        date EffectiveDate
+        currency TotalAmount
+        date abc_Order_Date__c
+        date abc_Delivered_Date__c
+        picklist abc_Channel__c
+    }
+    ORDERITEM {
+        number Quantity
+        currency UnitPrice
+        currency TotalPrice
+    }
+    ABC_ORDER_ARCHIVE {
+        datetime abc_Order_Date__c "index 1 DESC"
+        text abc_Order_Number__c "index 2 ASC"
+        text abc_Order_Id__c
+        text abc_Account_Name__c
+        text abc_Status__c
+        number abc_Total_Amount__c
+        longtext abc_Line_Items_JSON__c
+        datetime abc_Archived_On__c
+    }
+    ABC_LOG_EVENT {
+        text abc_Level__c
+        longtext abc_Message__c
+        text abc_Request_Id__c
+        text abc_Source__c
+    }
+    ABC_LOG {
+        autonumber Name "LOG-00000000"
+        picklist abc_Level__c
+        longtext abc_Message__c
+        text abc_Request_Id__c
+        picklist abc_Source__c
+        number abc_Http_Status__c
+    }

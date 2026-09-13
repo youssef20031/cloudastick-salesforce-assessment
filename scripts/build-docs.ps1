@@ -74,13 +74,20 @@ function Write-Ok   { param([string]$Message) Write-Host "  $Message" -Foregroun
 function Find-Chrome {
     <#  Chrome is not on PATH in a default Windows install, so probe the three
         locations the installer actually uses, then fall back to the registry. #>
-    $candidates = @(
-        (Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'),
-        (Join-Path ${env:ProgramFiles(x86)} 'Google\Chrome\Application\chrome.exe'),
-        (Join-Path $env:LOCALAPPDATA 'Google\Chrome\Application\chrome.exe'),
-        (Join-Path $env:ProgramFiles 'Google\Chrome Beta\Application\chrome.exe'),
-        (Join-Path $env:ProgramFiles 'Chromium\Application\chrome.exe')
-    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+    # Built as separate strings first: Join-Path throws on a null base, and
+    # ProgramFiles(x86) does not exist on every machine. The outer @() keeps the
+    # result an array even when Where-Object matches nothing or exactly one path.
+    $roots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA) | Where-Object { $_ }
+    $relatives = @(
+        'Google\Chrome\Application\chrome.exe',
+        'Google\Chrome Beta\Application\chrome.exe',
+        'Chromium\Application\chrome.exe'
+    )
+    $probes = @()
+    foreach ($root in $roots) {
+        foreach ($rel in $relatives) { $probes += (Join-Path $root $rel) }
+    }
+    $candidates = @($probes | Where-Object { Test-Path -LiteralPath $_ })
 
     if ($candidates.Count -gt 0) { return $candidates[0] }
 
@@ -521,9 +528,9 @@ function Build-Document {
     [void]$metaRows.AppendLine("    <dt>Status</dt><dd>$(if ($todoCount -gt 0 -and -not $HideTodos) { "Draft - $todoCount item(s) pending" } else { 'Issued' })</dd>")
 
     $cover = $CoverTemplate.
-        Replace('{{EYEBROW}}',       (ConvertTo-HtmlText (if ($meta.ContainsKey('eyebrow')) { $meta['eyebrow'] } else { 'ABC Pharmacy - Salesforce Entry Assessment' }))).
+        Replace('{{EYEBROW}}',       (ConvertTo-HtmlText $(if ($meta.ContainsKey('eyebrow')) { $meta['eyebrow'] } else { 'ABC Pharmacy - Salesforce Entry Assessment' }))).
         Replace('{{COVER_TITLE}}',   (ConvertTo-HtmlText $title)).
-        Replace('{{COVER_SUBTITLE}}',(ConvertTo-HtmlText (if ($meta.ContainsKey('subtitle')) { $meta['subtitle'] } else { '' }))).
+        Replace('{{COVER_SUBTITLE}}',(ConvertTo-HtmlText $(if ($meta.ContainsKey('subtitle')) { $meta['subtitle'] } else { '' }))).
         Replace('{{COVER_META}}',    $metaRows.ToString())
 
     # ---- one self-contained HTML file
