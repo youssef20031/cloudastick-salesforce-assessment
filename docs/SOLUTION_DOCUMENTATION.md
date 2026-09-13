@@ -712,9 +712,18 @@ A System Administrator user has been created for Cloudastick:
 | Licence | Salesforce |
 | Permission sets | `abc_Pharmacy_Admin`, `abc_Warehouse_User` |
 
-A password-reset email is sent at hand-in; the link is valid for 24 hours. Open
-the **ABC Pharmacy Management** app, then the **Warehouse Orders** tab for the
-console and **abc Logs** for the application log.
+The password is supplied in the submission email rather than written here, and
+deliberately not committed to this repository. It was set with
+`System.setPassword`, not `System.resetPassword`, so there is no 24-hour link to
+race and no forced change on first login.
+
+On the first login from a new location Salesforce will email a verification code
+to `assessments@cloudastick.com`. That is by design - the assessment asks for a
+reviewer account that works **without** access to the author's personal
+verification codes, and this account's codes go to Cloudastick's own mailbox.
+
+Once in: open the **ABC Pharmacy Management** app, then the **Warehouse Orders**
+tab for the console and **abc Logs** for the application log.
 
 The Postman collection in `postman/` covers every endpoint. Import the
 collection and the environment, set the consumer key and secret, and run the
