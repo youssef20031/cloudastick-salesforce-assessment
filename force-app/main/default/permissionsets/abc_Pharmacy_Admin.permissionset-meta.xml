@@ -282,6 +282,16 @@
         <apexClass>abc_WarehouseOrdersController</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <!--
+        Lets the seed script set CreatedDate on demo orders so the warehouse
+        console can show an order "created before today". Requires Setup >
+        User Interface > "Set Audit Fields upon Record Creation" to be on,
+        without which this permission does not exist in the org at all.
+    -->
+    <userPermissions>
+        <name>CreateAuditFields</name>
+        <enabled>true</enabled>
+    </userPermissions>
     <userPermissions>
         <name>ActivateOrder</name>
         <enabled>true</enabled>

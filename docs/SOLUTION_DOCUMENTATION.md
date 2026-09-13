@@ -625,8 +625,12 @@ for whoever deploys next.
 Two settings must be enabled in Setup by hand — neither is exposed to the
 Metadata API:
 
-1. **User Interface → "Set Audit Fields upon Record Creation"**. Only needed so
-   the seed script can backdate `CreatedDate` and demonstrate the ⌛ icon.
+1. **User Interface → "Set Audit Fields upon Record Creation"**, so the seed
+   script can backdate `CreatedDate` and the console can show an order created
+   before today. Until it is on, the `CreateAuditFields` permission does not
+   exist in the org at all — which is why `abc_Pharmacy_Admin` grants it and
+   `abc_seed_data.apex` writes the field through `put()` rather than as a field
+   assignment, the static form being a compile error while the setting is off.
 2. **Deliverability → All email**, so the reviewer's password reset can be sent.
 
 And the API client is registered in **Setup → External Client App Manager**:
@@ -656,7 +660,7 @@ Delivered over a year ago for the batch to find.
 | `sf project deploy start --source-dir force-app` | Succeeds — 92/92 components, 0 errors, with the nightly job scheduled |
 | `sf apex run test --test-level RunLocalTests --code-coverage` | **133 tests, 100% passing, 91% org-wide coverage** |
 | Order status codes | `Draft`→Draft; `Activated`, `In delivery`, `Delivered`→Activated |
-| Warehouse console | Renders with legend; ⏳, 🚚 and ✅ all correct against seeded data |
+| Warehouse console | Renders with legend; **all four icons** correct against seeded data — ⏳ created today, ⌛ created earlier, 🚚 in delivery, ✅ delivered |
 | Archival batch | `AsyncApexJob` Completed, 0 errors; order 00000104 archived with all three line items as JSON and deleted from Order; the recent Delivered order untouched |
 | Nightly schedule | `abc_Order_Archive_Nightly`, `0 0 2 * * ?`, state WAITING |
 | Delivered-date flow | Moving an order to Delivered with no delivered date stamps today; verified against the org |
@@ -724,10 +728,12 @@ collection and the environment, set the consumer key and secret, and run the
 
 - **Big object writes are untestable in Apex.** Covered in section 8.3; the real
   write is verified by a runbook script instead.
-- **The ⌛ icon needs an org setting.** Demonstrating "created before today"
-  requires backdating `CreatedDate`, which needs *Set Audit Fields upon Record
-  Creation*. Without it every seeded order is created today. The rule itself is
-  fully unit tested using `Test.setCreatedDate`.
+- **Seeding a "created before today" order needs an org setting.** The ⌛ rule
+  keys on `CreatedDate`, which can only be written when *Set Audit Fields upon
+  Record Creation* is enabled — it is, in this org, and the seed data exercises
+  all four icons. In an org where it is off, `abc_seed_data.apex` detects that
+  and carries on without backdating, so every seeded order reads as created
+  today. The rule itself is unit tested independently with `Test.setCreatedDate`.
 - **Client-credentials OAuth.** Chosen so a reviewer needs one token call. A
   production Ionic app should use Authorization Code with PKCE, so that actions
   are attributed to the real customer rather than to a shared integration user.
