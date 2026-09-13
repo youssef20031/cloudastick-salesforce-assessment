@@ -1,0 +1,1895 @@
+{
+  "info": {
+    "_postman_id": "9f2c1b40-6a3e-4c88-9f0a-abcpharmacy001",
+    "name": "ABC Pharmacy API",
+    "description": "# ABC Pharmacy REST API\n\nEvery endpoint the Ionic app uses, with assertions on the status code, the shared response envelope and the documented error codes.\n\n## Running it\n\n1. Import this collection **and** `abc_Pharmacy.postman_environment.json`.\n2. Select the **ABC Pharmacy** environment and fill in `clientId` and `clientSecret` from Setup > External Client App Manager > abc_Ionic_App > Settings > OAuth Settings > Consumer Key and Secret.\n3. Run the folders in order: **0. Setup**, **1. Authentication**, **2. Products**, **3. Carts**, **4. Error cases** - or just run the whole collection, which does the same thing.\n\nAuthentication is handled once: **1. Authentication** stores the bearer token and the instance URL as collection variables, and every other request inherits them.\n\nThe requests depend on the demo data created by `scripts/apex/abc_seed_data.apex`.\n\nFull reference: `docs/API_DOCUMENTATION.md`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Fail fast with a readable message instead of a confusing 401 later.",
+          "if (!pm.collectionVariables.get(\"accessToken\") && !pm.request.url.toString().includes(\"oauth2/token\")) {",
+          "    console.warn(\"No access token yet - run '1. Authentication > Get access token' first.\");",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "",
+      "type": "string",
+      "description": "Set by the token request from instance_url."
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string",
+      "description": "Set by the token request."
+    },
+    {
+      "key": "cartId",
+      "value": "",
+      "type": "string",
+      "description": "The happy-path cart."
+    },
+    {
+      "key": "draftCartId",
+      "value": "",
+      "type": "string",
+      "description": "A cart kept in Draft for the error cases."
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string",
+      "description": "Captured from the product list."
+    },
+    {
+      "key": "productName",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "outOfStockProductId",
+      "value": "",
+      "type": "string",
+      "description": "Captured from the include-out-of-stock request."
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "description": "Run this first. It exchanges the External Client App's consumer key and secret for an access token using the OAuth 2.0 client credentials flow, then stores the token and the instance URL as collection variables so every other request picks them up automatically.\n\nSet `clientId` and `clientSecret` in the environment before running.",
+      "item": [
+        {
+          "name": "Get access token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200 - token issued\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response carries an access token\", function () {",
+                  "    pm.expect(body.access_token, \"access_token\").to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(body.token_type).to.eql(\"Bearer\");",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set(\"accessToken\", body.access_token);",
+                  "pm.collectionVariables.set(\"baseUrl\", body.instance_url + \"/services/apexrest\");",
+                  "console.log(\"Token stored. baseUrl =\", pm.collectionVariables.get(\"baseUrl\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{clientId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{clientSecret}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{myDomain}}/services/oauth2/token",
+              "host": [
+                "{{myDomain}}"
+              ],
+              "path": [
+                "services",
+                "oauth2",
+                "token"
+              ]
+            },
+            "description": "Must go to the org's My Domain host, not login.salesforce.com.\n\nClient credentials authenticates the application, not a person. A production Ionic app should use Authorization Code with PKCE so each customer acts as themselves; this flow is used here to keep a reviewer's setup to one call."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "0. Setup (run once)",
+      "description": "Creates a second, empty Draft cart that the error-case folder can poke at without disturbing the happy-path cart.",
+      "item": [
+        {
+          "name": "Create a spare Draft cart for the error cases",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set(\"draftCartId\", pm.response.json().data.cartId);",
+                  "console.log(\"draftCartId:\", pm.collectionVariables.get(\"draftCartId\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts"
+              ]
+            },
+            "description": "Kept in Draft for the whole run so the 400/404/409 item errors have somewhere to land.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer\": {\n    \"email\": \"karim.adel@example.com\",\n    \"firstName\": \"Karim\",\n    \"lastName\": \"Adel\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Products",
+      "description": "The catalogue endpoint the Ionic app renders its product list from.",
+      "item": [
+        {
+          "name": "List products (defaults)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"Payload uses the documented keys\", function () {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data).to.have.all.keys(\"items\", \"count\", \"limit\", \"offset\");",
+                  "    pm.expect(data.items).to.be.an(\"array\");",
+                  "    pm.expect(data.limit, \"default page size\").to.eql(50);",
+                  "    pm.expect(data.offset).to.eql(0);",
+                  "});",
+                  "",
+                  "pm.test(\"Each product carries everything the app needs\", function () {",
+                  "    const items = pm.response.json().data.items;",
+                  "    pm.expect(items.length, \"seed data should be present\").to.be.above(0);",
+                  "    items.forEach(function (p) {",
+                  "        pm.expect(p).to.have.all.keys(",
+                  "            \"id\", \"name\", \"productCode\", \"description\", \"category\",",
+                  "            \"requiresPrescription\", \"stockQuantity\", \"unitPrice\", \"currencyIsoCode\"",
+                  "        );",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test(\"Out-of-stock products are hidden by default\", function () {",
+                  "    pm.response.json().data.items.forEach(function (p) {",
+                  "        pm.expect(p.stockQuantity, p.name + \" should be in stock\").to.be.above(0);",
+                  "    });",
+                  "});",
+                  "",
+                  "// Remember a product id for the cart requests further down.",
+                  "const items = pm.response.json().data.items;",
+                  "if (items.length > 0) {",
+                  "    pm.collectionVariables.set(\"productId\", items[0].id);",
+                  "    pm.collectionVariables.set(\"productName\", items[0].name);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "products"
+              ]
+            },
+            "description": "Returns the sellable catalogue: active products with an active standard price and stock on hand."
+          },
+          "response": []
+        },
+        {
+          "name": "Search by name or code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"Every row matches the search term\", function () {",
+                  "    const items = pm.response.json().data.items;",
+                  "    items.forEach(function (p) {",
+                  "        const haystack = (p.name + \" \" + p.productCode).toLowerCase();",
+                  "        pm.expect(haystack).to.include(\"para\");",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "para"
+                }
+              ]
+            },
+            "description": "`search` is a case-insensitive substring match against product name and product code."
+          },
+          "response": []
+        },
+        {
+          "name": "Filter by category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"Only the requested category comes back\", function () {",
+                  "    pm.response.json().data.items.forEach(function (p) {",
+                  "        pm.expect(p.category).to.eql(\"Medicine\");",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "Medicine"
+                }
+              ]
+            },
+            "description": "One of Medicine, Supplement, Personal Care, Medical Device."
+          },
+          "response": []
+        },
+        {
+          "name": "Include out-of-stock products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"At least one zero-stock product is now listed\", function () {",
+                  "    const items = pm.response.json().data.items;",
+                  "    const zero = items.filter(function (p) { return p.stockQuantity === 0; });",
+                  "    pm.expect(zero.length, \"seed data includes an out-of-stock oximeter\").to.be.above(0);",
+                  "    pm.collectionVariables.set(\"outOfStockProductId\", zero[0].id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "includeOutOfStock",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Use on a 'notify me' screen rather than the main list. Also captures an out-of-stock product id for the 409 test."
+          },
+          "response": []
+        },
+        {
+          "name": "Paging",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"The page is the size that was asked for\", function () {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data.limit).to.eql(2);",
+                  "    pm.expect(data.offset).to.eql(0);",
+                  "    pm.expect(data.items.length).to.be.at.most(2);",
+                  "    pm.expect(data.count).to.eql(data.items.length);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "2"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "`count` is the size of this page, not of the catalogue. Page until a response returns fewer than `limit` items."
+          },
+          "response": []
+        },
+        {
+          "name": "Oversized limit is clamped, not rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"limit is capped at 200\", function () {",
+                  "    pm.expect(pm.response.json().data.limit).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "9999"
+                }
+              ]
+            },
+            "description": "A client cannot pull the whole catalogue in one call; the page size is clamped rather than the request failing."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Carts",
+      "description": "The cart lifecycle. A cart is a Draft order, so checkout activates the same record rather than copying it into a new one.\n\nRun these in order: the create request stores `cartId` for the rest.",
+      "item": [
+        {
+          "name": "Create cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"A Draft cart is returned with the documented shape\", function () {",
+                  "    const cart = pm.response.json().data;",
+                  "    pm.expect(cart).to.have.all.keys(",
+                  "        \"cartId\", \"orderNumber\", \"status\", \"customer\", \"items\", \"totalAmount\", \"createdDate\"",
+                  "    );",
+                  "    pm.expect(cart.status).to.eql(\"Draft\");",
+                  "    pm.expect(cart.customer.email).to.eql(\"mona.hassan@example.com\");",
+                  "});",
+                  "",
+                  "pm.test(\"The customer was matched or created\", function () {",
+                  "    const customer = pm.response.json().data.customer;",
+                  "    pm.expect(customer.accountId, \"accountId\").to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(customer.contactId, \"contactId\").to.be.a(\"string\").and.not.empty;",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set(\"cartId\", pm.response.json().data.cartId);",
+                  "console.log(\"cartId:\", pm.collectionVariables.get(\"cartId\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts"
+              ]
+            },
+            "description": "Finds or creates the customer by email, then opens a Draft order stamped as coming from the Ionic app. Returns 201.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer\": {\n    \"email\": \"mona.hassan@example.com\",\n    \"firstName\": \"Mona\",\n    \"lastName\": \"Hassan\",\n    \"phone\": \"+20 100 111 2222\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add a product to the cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"The line is in the cart\", function () {",
+                  "    const cart = pm.response.json().data;",
+                  "    pm.expect(cart.items.length).to.eql(1);",
+                  "    pm.expect(cart.items[0].quantity).to.eql(2);",
+                  "    pm.expect(cart.items[0].productId).to.eql(pm.collectionVariables.get(\"productId\"));",
+                  "});",
+                  "",
+                  "pm.test(\"The total is the sum of the lines\", function () {",
+                  "    const cart = pm.response.json().data;",
+                  "    const sum = cart.items.reduce(function (t, i) { return t + i.totalPrice; }, 0);",
+                  "    pm.expect(cart.totalAmount).to.eql(sum);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{cartId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{cartId}}",
+                "items"
+              ]
+            },
+            "description": "Adding to an existing cart is a 200, not a 201 - no new resource is created.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add the same product again (quantities merge)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"One line per product, quantity merged\", function () {",
+                  "    const cart = pm.response.json().data;",
+                  "    pm.expect(cart.items.length, \"the cart must not grow a second line\").to.eql(1);",
+                  "    pm.expect(cart.items[0].quantity, \"2 + 3\").to.eql(5);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{cartId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{cartId}}",
+                "items"
+              ]
+            },
+            "description": "The app does not have to check whether a product is already in the cart - the API merges.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Read the cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"It is the same cart\", function () {",
+                  "    const cart = pm.response.json().data;",
+                  "    pm.expect(cart.cartId).to.eql(pm.collectionVariables.get(\"cartId\"));",
+                  "    pm.expect(cart.status).to.eql(\"Draft\");",
+                  "    pm.expect(cart.items.length).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{cartId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{cartId}}"
+              ]
+            },
+            "description": "Re-renders the cart screen. Same CartDto shape as every other cart response."
+          },
+          "response": []
+        },
+        {
+          "name": "Checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is true\", function () {",
+                  "    pm.expect(pm.response.json().success, \"success\").to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"The same order is now Activated\", function () {",
+                  "    const cart = pm.response.json().data;",
+                  "    pm.expect(cart.cartId, \"checkout must not create a second record\")",
+                  "        .to.eql(pm.collectionVariables.get(\"cartId\"));",
+                  "    pm.expect(cart.status).to.eql(\"Activated\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{cartId}}/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{cartId}}",
+                "checkout"
+              ]
+            },
+            "description": "Places the order. The Draft becomes Activated - no data is copied, so there is no window in which a cart and its order disagree. Takes no body."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Error cases",
+      "description": "Every documented failure, one request each. These are what the Ionic app has to handle, so they are part of the contract as much as the happy path.\n\nEach one also writes an abc_Log__c row in Salesforce carrying the same requestId the response returns.",
+      "item": [
+        {
+          "name": "400 INVALID_INPUT - limit is not a number",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is INVALID_INPUT\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"INVALID_INPUT\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"The offending field is named\", function () {",
+                  "    pm.expect(pm.response.json().errors[0].field).to.eql(\"limit\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "ten"
+                }
+              ]
+            },
+            "description": "A query parameter of the wrong type is reported rather than silently ignored."
+          },
+          "response": []
+        },
+        {
+          "name": "400 INVALID_INPUT - includeOutOfStock is ambiguous",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is INVALID_INPUT\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"INVALID_INPUT\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "includeOutOfStock",
+                  "value": "maybe"
+                }
+              ]
+            },
+            "description": "Only 'true' and 'false' are accepted. 'maybe' is a client bug, not something to guess at."
+          },
+          "response": []
+        },
+        {
+          "name": "400 MALFORMED_JSON - body is not JSON",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is MALFORMED_JSON\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"MALFORMED_JSON\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts"
+              ]
+            },
+            "description": "The body could not be parsed at all.",
+            "body": {
+              "mode": "raw",
+              "raw": "this is not json",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "400 MALFORMED_JSON - misspelled attribute",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is MALFORMED_JSON\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"MALFORMED_JSON\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{cartId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{cartId}}",
+                "items"
+              ]
+            },
+            "description": "Bodies are parsed strictly. 'quantityy' is rejected immediately rather than read as an absent quantity, which would fail later with a confusing message.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantityy\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "400 VALIDATION_ERROR - quantity must be positive",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is VALIDATION_ERROR\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"VALIDATION_ERROR\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"The offending field is named\", function () {",
+                  "    pm.expect(pm.response.json().errors[0].field).to.eql(\"quantity\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{draftCartId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{draftCartId}}",
+                "items"
+              ]
+            },
+            "description": "The body parsed, but a business rule rejected the value. Uses the spare Draft cart created in the setup folder.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "404 CART_NOT_FOUND - unknown cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is CART_NOT_FOUND\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"CART_NOT_FOUND\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/801000000000001AAA",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "801000000000001AAA"
+              ]
+            },
+            "description": "A well-formed Order id that does not exist. A malformed id, or an id belonging to another object, returns the same code."
+          },
+          "response": []
+        },
+        {
+          "name": "404 PRODUCT_NOT_FOUND - unknown product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is PRODUCT_NOT_FOUND\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"PRODUCT_NOT_FOUND\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{draftCartId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{draftCartId}}",
+                "items"
+              ]
+            },
+            "description": "The product does not exist, is inactive, or has no active standard price.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"01t000000000000AAA\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "404 ROUTE_NOT_FOUND - no such endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is ROUTE_NOT_FOUND\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"ROUTE_NOT_FOUND\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"The message lists the valid routes\", function () {",
+                  "    pm.expect(pm.response.json().errors[0].message).to.include(\"checkout\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{draftCartId}}/gift-wrap",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{draftCartId}}",
+                "gift-wrap"
+              ]
+            },
+            "description": "An unrecognised path is reported with the routes that do exist, rather than falling through to something surprising.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "409 INSUFFICIENT_STOCK - more units than the warehouse has",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is INSUFFICIENT_STOCK\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"INSUFFICIENT_STOCK\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  "",
+                  "pm.test(\"The message says what is actually available\", function () {",
+                  "    pm.expect(pm.response.json().errors[0].message).to.include(\"in stock\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{draftCartId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{draftCartId}}",
+                "items"
+              ]
+            },
+            "description": "A conflict with the current state of the warehouse, not a malformed request - hence 409 rather than 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{outOfStockProductId}}\",\n  \"quantity\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "409 CART_NOT_EDITABLE - the cart was already checked out",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is the ABC envelope\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body, \"envelope\").to.be.an(\"object\");",
+                  "    pm.expect(body).to.have.property(\"success\");",
+                  "    pm.expect(body).to.have.property(\"data\");",
+                  "    pm.expect(body).to.have.property(\"errors\");",
+                  "    pm.expect(body).to.have.property(\"requestId\");",
+                  "    pm.expect(body.errors, \"errors is always an array\").to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"success is false and data is null\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.eql(false);",
+                  "    pm.expect(body.data).to.eql(null);",
+                  "});",
+                  "",
+                  "pm.test(\"error code is CART_NOT_EDITABLE\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errors.length, \"one error\").to.be.above(0);",
+                  "    pm.expect(body.errors[0].code).to.eql(\"CART_NOT_EDITABLE\");",
+                  "    console.log(\"message:\", body.errors[0].message);",
+                  "});",
+                  "",
+                  "pm.test(\"A requestId is returned for support\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.requestId, \"requestId\").to.be.a(\"string\").and.not.empty;",
+                  "    console.log(\"requestId:\", body.requestId);",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/abc/v1/carts/{{cartId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "abc",
+                "v1",
+                "carts",
+                "{{cartId}}",
+                "items"
+              ]
+            },
+            "description": "Once an order leaves Draft its contents are frozen. Run the Carts folder first so this cart is checked out.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -235,6 +235,14 @@ code — see section 3.5.
 | `Order` | `abc_Order_Date_Not_In_Future` | An order cannot be placed in the future; keeps the one-year archival window honest. |
 | `Order` | `abc_Effective_Date_Not_Before_Order_Date` | An order cannot take effect before it was placed. Both dates appear side by side on the warehouse console, so an inverted pair would be visibly wrong. |
 
+### 3.4a Declarative automation
+
+One record-triggered flow, `abc_Order_Set_Delivered_Date`: a **before-save** flow on
+Order that stamps `abc_Delivered_Date__c` with today when an order first reaches
+Delivered without one. Before-save is the important part — the field is set on the
+record already being written, so there is no second DML and no recursion to guard
+against.
+
 ### 3.5 Design decisions and assumptions
 
 **A cart is a Draft Order, not a separate object.** Salesforce already gives an
@@ -331,6 +339,7 @@ managed by someone else.
 | `abc_Warehouse_Orders` | Custom tab | Surfaces the page in the Lightning app. |
 | `abc_Log__c` | Custom tab | With list views `abc Recent Errors` and `abc All Logs`. |
 | `abc_Pharmacy_Management` | Lightning app | Home, Accounts, Contacts, Products, Orders, Warehouse Orders, abc Logs. |
+| `abc_Order_Set_Delivered_Date` | Record-triggered Flow | Before-save on Order: when an order first reaches Delivered with no delivered date, stamps today. |
 | `abc_Pharmacy_Admin` · `abc_Warehouse_User` · `abc_API_Integration` | Permission sets | Section 9. |
 
 ---
@@ -584,6 +593,7 @@ and reads no business data.
 | **Custom Object** | `abc_Log__c` | Makes logs reportable, list-viewable and queryable by requestId — a debug log is none of those. |
 | **Big Object** | `abc_Order_Archive__b` | Exactly the requirement, and the right tool: unlimited, cheap, indexed storage for records you keep but rarely read. |
 | **Batch Apex + Schedulable** | `abc_OrderArchiveBatch` | Archival is unbounded over time; batch chunking is what keeps it inside governor limits as the order history grows. |
+| **Record-Triggered Flow** | `abc_Order_Set_Delivered_Date` | A before-save flow is the cheapest thing on the platform that can default one field on the record being saved — no query, no DML, no Apex to maintain. Keeping it declarative also lets the pharmacy change the rule without a deployment. Apex would have been the wrong tool. |
 | **Visualforce + SLDS** | `abc_WarehouseOrders` | Requested explicitly. `apex:slds` keeps it visually native to Lightning without hand-written CSS. |
 | **Custom Tabs** | Two | Surfaces the page and the log inside the app. |
 
@@ -600,6 +610,17 @@ sf org assign permset --name abc_Pharmacy_Admin
 sf org assign permset --name abc_Warehouse_User
 sf org assign permset --name abc_API_Integration
 ```
+
+One thing to know before the second deploy: **a scheduled Apex job blocks Apex
+deployments.** Once `abc_Order_Archive_Nightly` exists, Salesforce refuses to
+deploy any Apex class while that job is pending — and because a deploy is all or
+nothing, one scheduled job blocks the whole source directory, not just the batch.
+`force-app/main/default/settings/Deployment.settings-meta.xml` turns on *Allow
+deployments of components when corresponding Apex jobs are pending or in
+progress*, which is the supported remedy; it is deployed as part of the source,
+so a first deploy into a fresh org sets it before anything is scheduled. The
+alternative — unschedule before every deploy, reschedule afterwards — is a trap
+for whoever deploys next.
 
 Two settings must be enabled in Setup by hand — neither is exposed to the
 Metadata API:
@@ -632,12 +653,13 @@ Delivered over a year ago for the batch to find.
 
 | Check | Result |
 |---|---|
-| `sf project deploy start --source-dir force-app` | Succeeds |
+| `sf project deploy start --source-dir force-app` | Succeeds — 92/92 components, 0 errors, with the nightly job scheduled |
 | `sf apex run test --test-level RunLocalTests --code-coverage` | **133 tests, 100% passing, 91% org-wide coverage** |
 | Order status codes | `Draft`→Draft; `Activated`, `In delivery`, `Delivered`→Activated |
 | Warehouse console | Renders with legend; ⏳, 🚚 and ✅ all correct against seeded data |
 | Archival batch | `AsyncApexJob` Completed, 0 errors; order 00000104 archived with all three line items as JSON and deleted from Order; the recent Delivered order untouched |
 | Nightly schedule | `abc_Order_Archive_Nightly`, `0 0 2 * * ?`, state WAITING |
+| Delivered-date flow | Moving an order to Delivered with no delivered date stamps today; verified against the org |
 
 ---
 

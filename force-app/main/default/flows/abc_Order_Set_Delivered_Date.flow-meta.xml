@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>67.0</apiVersion>
+    <assignments>
+        <name>abc_Stamp_Delivered_Date</name>
+        <label>Stamp today as the delivered date</label>
+        <locationX>176</locationX>
+        <locationY>287</locationY>
+        <assignmentItems>
+            <assignToReference>$Record.abc_Delivered_Date__c</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <elementReference>$Flow.CurrentDate</elementReference>
+            </value>
+        </assignmentItems>
+    </assignments>
+    <description>When an order first reaches Delivered without a delivered date, stamp today. A before-save flow rather than Apex: it is a single field default on the record being saved, needs no query and no DML, and is the cheapest thing on the platform that can do it. Keeping it declarative also means the pharmacy can change the rule without a deployment.</description>
+    <environments>Default</environments>
+    <interviewLabel>abc Order Set Delivered Date {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>abc Order Set Delivered Date</label>
+    <processType>AutoLaunchedFlow</processType>
+    <start>
+        <locationX>50</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>abc_Stamp_Delivered_Date</targetReference>
+        </connector>
+        <doesRequireRecordChangedToMeetCriteria>true</doesRequireRecordChangedToMeetCriteria>
+        <filterLogic>and</filterLogic>
+        <filters>
+            <field>Status</field>
+            <operator>EqualTo</operator>
+            <value>
+                <stringValue>Delivered</stringValue>
+            </value>
+        </filters>
+        <filters>
+            <field>abc_Delivered_Date__c</field>
+            <operator>IsNull</operator>
+            <value>
+                <booleanValue>true</booleanValue>
+            </value>
+        </filters>
+        <object>Order</object>
+        <recordTriggerType>CreateAndUpdate</recordTriggerType>
+        <triggerType>RecordBeforeSave</triggerType>
+    </start>
+    <status>Active</status>
+</Flow>

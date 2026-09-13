@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DeploymentSettings xmlns="http://soap.sforce.com/2006/04/metadata">
+    <!--
+        Once abc_OrderArchiveScheduler is scheduled, Salesforce refuses to deploy
+        any Apex class while that job is pending - and because a deploy is all or
+        nothing, one scheduled job blocks the entire source directory, not just
+        the batch. The alternative is to unschedule before every deploy and
+        reschedule afterwards, which is a trap waiting for whoever deploys next.
+
+        This is the setting behind Setup > Deployment Settings > "Allow
+        deployments of components when corresponding Apex jobs are pending or in
+        progress". It relaxes a validation, not a permission.
+    -->
+    <doesSkipAsyncApexValidation>true</doesSkipAsyncApexValidation>
+</DeploymentSettings>
