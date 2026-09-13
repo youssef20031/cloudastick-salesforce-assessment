@@ -53,3 +53,6 @@ postman/*.secret.*
 
 # Scratch output
 docs/dist/*.html
+
+# Local build tracker, not part of the deliverable
+BUILD_STATUS.md

@@ -1,0 +1,260 @@
+<apex:page controller="abc_WarehouseOrdersController"
+           title="ABC Warehouse Orders"
+           showHeader="true"
+           sidebar="false"
+           applyHtmlTag="true"
+           applyBodyTag="true"
+           docType="html-5.0"
+           cache="false">
+    <!--
+        ABC pharmacy - warehouse orders console.
+
+        Every order on one screen: order number, status and effective date, with
+        an icon in front of the number, and a row that expands to the products
+        that have to be picked (name, quantity, unit price).
+
+        Notes on the implementation choices:
+        - Icons are HTML numeric character entities (see abc_WarehouseOrdersController
+          for why) and each one is repeated as text in the Status column and in an
+          aria-label, so the icon is never the only signal.
+        - Precedence when several rules match one order: Delivered, then In delivery,
+          then created today, then created earlier. The legend below says so on screen.
+        - No apex:form, so the page carries no view state even with 1000 orders.
+        - The expand/collapse is one delegated listener in plain JavaScript: no
+          library, no inline event handler, nothing that a strict CSP would block.
+    -->
+    <apex:slds />
+
+    <style type="text/css">
+        .abc-icon { font-size: 1.15rem; line-height: 1; margin-right: 0.4rem; }
+        .abc-order-number { font-weight: 700; }
+        .abc-caret { font-size: 0.9rem; }
+        .abc-detail-cell { background-color: #f3f3f3; padding: 0.75rem 1.5rem; }
+        .abc-legend-item { display: inline-block; margin-right: 1.5rem; white-space: nowrap; }
+        .abc-numeric { text-align: right; }
+    </style>
+
+    <div class="slds-scope">
+        <div class="slds-p-around_medium">
+
+            <div class="slds-page-header slds-m-bottom_small">
+                <div class="slds-page-header__row">
+                    <div class="slds-page-header__col-title">
+                        <div class="slds-media">
+                            <div class="slds-media__body">
+                                <h1 class="slds-page-header__title slds-truncate" title="Warehouse orders">Warehouse orders</h1>
+                                <p class="slds-page-header__name-meta">
+                                    ABC pharmacy &#8212; every order, newest first. Expand a row to see the products to pick.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="slds-page-header__col-actions">
+                        <div class="slds-page-header__controls">
+                            <div class="slds-page-header__control">
+                                <span class="slds-badge">
+                                    <apex:outputText value="{!orderCount}" /> order(s) shown
+                                </span>
+                            </div>
+                            <div class="slds-page-header__control">
+                                <button type="button" class="slds-button slds-button_neutral abc-refresh">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <apex:pageMessages id="abcMessages" />
+
+            <!-- Icon legend. The precedence sentence is the documented design decision. -->
+            <div class="slds-box slds-box_xx-small slds-theme_shade slds-m-bottom_small">
+                <h2 class="slds-text-title_caps slds-m-bottom_xx-small">Icon legend</h2>
+                <p>
+                    <span class="abc-legend-item"><span class="abc-icon" aria-hidden="true">&#x2705;</span>Delivered</span>
+                    <span class="abc-legend-item"><span class="abc-icon" aria-hidden="true">&#x1F69A;</span>In delivery</span>
+                    <span class="abc-legend-item"><span class="abc-icon" aria-hidden="true">&#x23F3;</span>Created today</span>
+                    <span class="abc-legend-item"><span class="abc-icon" aria-hidden="true">&#x231B;</span>Created before today</span>
+                </p>
+                <p class="slds-text-body_small slds-m-top_xx-small">
+                    The rules overlap, so they are applied in this order and the first match wins:
+                    <strong>Delivered</strong>, then <strong>In delivery</strong>, then
+                    <strong>created today</strong>, otherwise <strong>created earlier</strong>.
+                    Status therefore beats the creation date &#8212; an order delivered this morning
+                    shows &#x2705;, not &#x23F3;. The status is also spelled out in its own column.
+                </p>
+            </div>
+
+            <!-- apex:repeat renders at most 1000 rows, so say so rather than truncate silently. -->
+            <apex:outputPanel layout="none" rendered="{!rowLimitReached}">
+                <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_warning slds-m-bottom_small" role="alert">
+                    <h2>
+                        Showing only the <apex:outputText value="{!maxRows}" /> most recently created orders.
+                        Older orders exist but are not listed on this page.
+                    </h2>
+                </div>
+            </apex:outputPanel>
+
+            <!-- Friendly empty state: a warehouse with nothing to pick is normal, not an error. -->
+            <apex:outputPanel layout="none" rendered="{!AND(NOT(hasOrders), NOT(hasError))}">
+                <div class="slds-box slds-align_absolute-center slds-text-align_center slds-p-around_large">
+                    <div>
+                        <p class="slds-text-heading_small">No orders yet</p>
+                        <p class="slds-text-body_regular slds-m-top_x-small">
+                            Nothing has been ordered so far. New orders appear here as soon as they are placed,
+                            newest first.
+                        </p>
+                    </div>
+                </div>
+            </apex:outputPanel>
+
+            <apex:outputPanel layout="none" rendered="{!hasOrders}">
+                <table class="slds-table slds-table_bordered slds-table_striped slds-table_cell-buffer">
+                    <caption class="slds-assistive-text">
+                        All orders with their number, status and effective date. Each row can be expanded
+                        to list the products in that order with quantity and unit price.
+                    </caption>
+                    <thead>
+                        <tr class="slds-line-height_reset">
+                            <th scope="col" style="width:3.25rem">
+                                <span class="slds-assistive-text">Expand order</span>
+                            </th>
+                            <th scope="col"><div class="slds-truncate" title="Order number">Order number</div></th>
+                            <th scope="col"><div class="slds-truncate" title="Status">Status</div></th>
+                            <th scope="col"><div class="slds-truncate" title="Effective date">Effective date</div></th>
+                            <th scope="col"><div class="slds-truncate" title="Created">Created</div></th>
+                            <th scope="col"><div class="slds-truncate" title="Customer">Customer</div></th>
+                            <th scope="col" class="abc-numeric"><div class="slds-truncate" title="Total">Total</div></th>
+                            <th scope="col" class="abc-numeric"><div class="slds-truncate" title="Products">Products</div></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <apex:repeat value="{!rows}" var="row">
+
+                            <!-- Summary row -->
+                            <tr class="slds-hint-parent">
+                                <td>
+                                    <button type="button"
+                                            class="slds-button slds-button_icon slds-button_icon-border-filled abc-toggle"
+                                            aria-expanded="false"
+                                            aria-controls="{!row.detailId}"
+                                            title="{!row.toggleLabel}">
+                                        <span class="abc-caret" aria-hidden="true">&#x25B8;</span>
+                                        <span class="slds-assistive-text">{!row.toggleLabel}</span>
+                                    </button>
+                                </td>
+                                <th scope="row" data-label="Order number">
+                                    <span class="abc-icon" role="img" title="{!row.iconLabel}" aria-label="{!row.iconLabel}">
+                                        <apex:outputText escape="false" value="{!row.iconEntity}" />
+                                    </span>
+                                    <span class="abc-order-number">{!row.orderNumber}</span>
+                                </th>
+                                <td data-label="Status">{!row.status}</td>
+                                <td data-label="Effective date">{!row.effectiveDateText}</td>
+                                <td data-label="Created">{!row.createdDateText}</td>
+                                <td data-label="Customer"><div class="slds-truncate" title="{!row.accountName}">{!row.accountName}</div></td>
+                                <td data-label="Total" class="abc-numeric">{!row.totalAmountText}</td>
+                                <td data-label="Products" class="abc-numeric">{!row.itemCount}</td>
+                            </tr>
+
+                            <!-- Detail row: hidden until the summary row's button is pressed. -->
+                            <tr id="{!row.detailId}" class="abc-detail" style="display:none">
+                                <td colspan="8" class="abc-detail-cell">
+
+                                    <apex:outputPanel layout="none" rendered="{!row.hasItems}">
+                                        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                                            <caption class="slds-text-title_caps slds-p-bottom_xx-small">
+                                                Products in order {!row.orderNumber}
+                                            </caption>
+                                            <thead>
+                                                <tr class="slds-line-height_reset">
+                                                    <th scope="col"><div class="slds-truncate" title="Product name">Product name</div></th>
+                                                    <th scope="col" class="abc-numeric"><div class="slds-truncate" title="Quantity">Quantity</div></th>
+                                                    <th scope="col" class="abc-numeric"><div class="slds-truncate" title="Unit price">Unit price</div></th>
+                                                    <th scope="col" class="abc-numeric"><div class="slds-truncate" title="Line total">Line total</div></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <apex:repeat value="{!row.items}" var="line">
+                                                    <tr>
+                                                        <th scope="row" data-label="Product name">{!line.Product2.Name}</th>
+                                                        <td data-label="Quantity" class="abc-numeric">
+                                                            <apex:outputText value="{0, number, ###,##0.##}">
+                                                                <apex:param value="{!line.Quantity}" />
+                                                            </apex:outputText>
+                                                        </td>
+                                                        <td data-label="Unit price" class="abc-numeric">
+                                                            <apex:outputText value="{0, number, ###,##0.00}">
+                                                                <apex:param value="{!line.UnitPrice}" />
+                                                            </apex:outputText>
+                                                        </td>
+                                                        <td data-label="Line total" class="abc-numeric">
+                                                            <apex:outputText value="{0, number, ###,##0.00}">
+                                                                <apex:param value="{!line.TotalPrice}" />
+                                                            </apex:outputText>
+                                                        </td>
+                                                    </tr>
+                                                </apex:repeat>
+                                            </tbody>
+                                        </table>
+                                    </apex:outputPanel>
+
+                                    <apex:outputPanel layout="none" rendered="{!NOT(row.hasItems)}">
+                                        <p class="slds-text-color_weak">
+                                            This order has no products on it yet.
+                                        </p>
+                                    </apex:outputPanel>
+
+                                </td>
+                            </tr>
+
+                        </apex:repeat>
+                    </tbody>
+                </table>
+            </apex:outputPanel>
+
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        /*
+            Expand / collapse, in plain JavaScript.
+
+            One delegated listener on the document, no library and no inline
+            onclick attribute, so nothing here trips the org's content security
+            policy. The button carries aria-expanded and aria-controls; the
+            detail row it names is simply switched between display none and
+            table-row.
+        */
+        (function () {
+            function abcOnClick(event) {
+                var target = event.target;
+                if (!target) {
+                    return;
+                }
+                if (!target.closest) {
+                    return;
+                }
+                if (target.closest('.abc-refresh')) {
+                    window.location.reload();
+                    return;
+                }
+                var button = target.closest('.abc-toggle');
+                if (!button) {
+                    return;
+                }
+                var detail = document.getElementById(button.getAttribute('aria-controls'));
+                if (!detail) {
+                    return;
+                }
+                var expanded = button.getAttribute('aria-expanded') === 'true';
+                button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+                detail.style.display = expanded ? 'none' : 'table-row';
+                var caret = button.querySelector('.abc-caret');
+                if (caret) {
+                    caret.textContent = expanded ? '▸' : '▾';
+                }
+            }
+            document.addEventListener('click', abcOnClick, false);
+        }());
+    </script>
+</apex:page>

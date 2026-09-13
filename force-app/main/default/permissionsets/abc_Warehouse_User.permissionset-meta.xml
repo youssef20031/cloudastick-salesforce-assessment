@@ -32,7 +32,7 @@
         <allowEdit>true</allowEdit>
         <allowRead>true</allowRead>
         <modifyAllRecords>false</modifyAllRecords>
-        <viewAllRecords>true</viewAllRecords>
+        <viewAllRecords>false</viewAllRecords>
     </objectPermissions>
     <objectPermissions>
         <object>Order</object>
@@ -90,6 +90,10 @@
         <apexPage>abc_WarehouseOrders</apexPage>
         <enabled>true</enabled>
     </pageAccesses>
+    <classAccesses>
+        <apexClass>abc_Logger</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <classAccesses>
         <apexClass>abc_WarehouseOrdersController</apexClass>
         <enabled>true</enabled>
