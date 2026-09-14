@@ -142,6 +142,16 @@ are recorded server-side against the same `requestId`.
 
 The catalogue.
 
+> **What counts as the catalogue.** A product is returned when it is active
+> *and* has an active entry in the **standard price book** — that pairing is
+> what makes a product sellable, and it is the only definition the service
+> uses. It deliberately does not filter on the `ABC-` product code, so adding a
+> new pharmacy line needs no code change. The consequence is that any other
+> active, priced product in the org would also be listed: a Developer Edition
+> org ships with a sample catalogue (GenWatt generators, SLAs, Installations),
+> and `scripts/apex/abc_deactivate_sample_products.apex` deactivates it. Run
+> that script in any fresh org, or those records will appear here too.
+
 **Query parameters** — all optional.
 
 | Name | Type | Default | Notes |

@@ -642,6 +642,7 @@ consumer key and secret are revealed on the app's Settings tab.
 ### 11.2 Seed and demonstrate
 
 ```bash
+sf apex run --file scripts/apex/abc_deactivate_sample_products.apex  # retire the DE sample catalogue
 sf apex run --file scripts/apex/abc_seed_data.apex            # catalogue, customers, 5 orders
 sf apex run --file scripts/apex/abc_schedule_archive.apex     # nightly job at 02:00
 sf apex run --file scripts/apex/abc_run_archive_now.apex      # archive now
@@ -652,6 +653,17 @@ sf apex run --file scripts/apex/abc_seed_archivable_order.apex # re-arm the demo
 The seed creates five orders chosen to exercise every behaviour: an open Draft
 cart, an Activated order, one In delivery, one Delivered recently, and one
 Delivered over a year ago for the batch to find.
+
+Run `abc_deactivate_sample_products.apex` **first**, and in every fresh org.
+`abc_ProductService` defines the catalogue as "active product with an active
+entry in the standard price book" — the correct definition for a real org, and
+one that lets a new pharmacy line be added without a code change. A Developer
+Edition org, however, ships with its own sample catalogue of GenWatt generators,
+SLAs and Installations, and those records satisfy that definition too. They stay
+out of the default listing only because their `abc_Stock_Quantity__c` is null
+and `null > 0` is false in SOQL; call `GET /abc/v1/products?includeOutOfStock=true`
+and a pharmacy starts advertising diesel generators. Deactivating them fixes the
+data rather than narrowing the service to a product-code prefix.
 
 ### 11.3 Verified in this org
 
