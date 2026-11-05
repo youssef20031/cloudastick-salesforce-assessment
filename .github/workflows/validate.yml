@@ -1,0 +1,63 @@
+# Pull request check: plan, drift guard, check-only deploy with the selected tests and coverage.
+# The org does not change here. A slim version of the stages in the team's CI/CD design.
+name: validate
+
+on:
+  pull_request:
+    branches:
+      - demo
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    # A fork's pull request never gets the org login.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      SF_AUTOUPDATE_DISABLE: "true"
+      SF_DISABLE_TELEMETRY: "true"
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Check out with full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Install the Salesforce CLI
+        run: npm install --global @salesforce/cli@2.155.8
+      - name: Log in to abcDev
+        env:
+          SF_ABCDEV_AUTH_URL: ${{ secrets.SF_ABCDEV_AUTH_URL }}
+        run: |
+          printf '%s' "$SF_ABCDEV_AUTH_URL" > "$RUNNER_TEMP/auth-url"
+          sf org login sfdx-url --sfdx-url-file "$RUNNER_TEMP/auth-url" --alias abcDev
+          rm -f "$RUNNER_TEMP/auth-url"
+      - name: Plan
+        id: plan
+        run: python3 scripts/ci/pipeline.py plan --base "$BASE_SHA" --head "$HEAD_SHA"
+      - name: Drift guard
+        if: steps.plan.outputs.has_changes == 'true'
+        run: python3 scripts/ci/pipeline.py drift
+      - name: Check-only deploy, tests and coverage
+        if: steps.plan.outputs.has_changes == 'true'
+        run: python3 scripts/ci/pipeline.py validate
+      - name: Log out
+        if: always()
+        run: sf org logout --target-org abcDev --no-prompt || true

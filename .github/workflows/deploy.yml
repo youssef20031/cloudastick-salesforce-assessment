@@ -1,0 +1,60 @@
+# A merge into demo deploys to abcDev: the validated build by quick deploy, or a full deploy with tests.
+name: deploy
+
+on:
+  push:
+    branches:
+      - demo
+    paths:
+      - "force-app/**"
+
+permissions:
+  contents: read
+
+# One deploy to the org at a time, and none are cancelled.
+concurrency:
+  group: org-abcdev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # scripts/demo/reset.sh force-pushes demo and restores the org itself.
+    if: ${{ !github.event.forced }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      SF_AUTOUPDATE_DISABLE: "true"
+      SF_DISABLE_TELEMETRY: "true"
+      GH_TOKEN: ${{ github.token }}
+      BEFORE_SHA: ${{ github.event.before }}
+      AFTER_SHA: ${{ github.sha }}
+    steps:
+      - name: Check out with full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Install the Salesforce CLI
+        run: npm install --global @salesforce/cli@2.155.8
+      - name: Log in to abcDev
+        env:
+          SF_ABCDEV_AUTH_URL: ${{ secrets.SF_ABCDEV_AUTH_URL }}
+        run: |
+          printf '%s' "$SF_ABCDEV_AUTH_URL" > "$RUNNER_TEMP/auth-url"
+          sf org login sfdx-url --sfdx-url-file "$RUNNER_TEMP/auth-url" --alias abcDev
+          rm -f "$RUNNER_TEMP/auth-url"
+      - name: Plan
+        id: plan
+        run: python3 scripts/ci/pipeline.py plan --base "$BEFORE_SHA" --head "$AFTER_SHA"
+      - name: Deploy to abcDev
+        if: steps.plan.outputs.has_changes == 'true'
+        run: python3 scripts/ci/pipeline.py deploy
+      - name: Log out
+        if: always()
+        run: sf org logout --target-org abcDev --no-prompt || true
