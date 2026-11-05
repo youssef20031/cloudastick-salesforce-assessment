@@ -147,6 +147,13 @@ public with sharing class abc_CartService {
             throw abc_ApiException.validationError('An empty cart cannot be checked out.', 'items');
         }
 
+        // Stock can sell out while a cart waits, so it is checked again at the moment of purchase.
+        Map<Id, Decimal> quantityByProduct = new Map<Id, Decimal>();
+        for (OrderItem line : itemsOf(cart)) {
+            quantityByProduct.put(line.Product2Id, line.Quantity);
+        }
+        assertStock(quantityByProduct, loadEntries(quantityByProduct.keySet()), new Map<Id, Decimal>());
+
         Order activation = new Order(Id = cart.Id, Status = STATUS_ACTIVATED, abc_Order_Date__c = Date.today());
         if (cart.EffectiveDate == null || cart.EffectiveDate < Date.today()) {
             activation.EffectiveDate = Date.today();
