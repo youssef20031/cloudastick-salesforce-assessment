@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -183,23 +184,33 @@ def validate(_args):
     summary("Nothing has changed in the org yet. Merging this pull request deploys it.")
 
     # The merge reads this back to promote the validated build without rerunning tests.
+    tag = f"<!-- {MARKER}:{result['id']}:{os.environ['HEAD_SHA']} -->"
     run(
         "gh", "pr", "comment", os.environ["PR_NUMBER"],
-        "--body", f"Check-only deploy passed against abcDev. Merging deploys it.\n\n<!-- {MARKER}:{result['id']} -->",
+        "--body", f"Check-only deploy passed against abcDev. Merging deploys it.\n\n{tag}",
     )
 
 
 def validated_job_id():
+    """The build validated for the merged PR's final commit, or None to fall back to a full deploy.
+
+    Anyone can comment on a public repo's PR, so only this workflow's own comment counts,
+    and only when its id is well formed and it was written for the commit that was merged.
+    """
     repo = os.environ["GITHUB_REPOSITORY"]
     sha = os.environ["GITHUB_SHA"]
     pulls = json.loads(run("gh", "api", f"repos/{repo}/commits/{sha}/pulls").stdout)
     if not pulls:
         return None
-    comments = json.loads(run("gh", "api", f"repos/{repo}/issues/{pulls[0]['number']}/comments").stdout)
+    number, head_sha = pulls[0]["number"], pulls[0]["head"]["sha"]
+    comments = json.loads(run("gh", "api", f"repos/{repo}/issues/{number}/comments?per_page=100").stdout)
+    pattern = re.compile(rf"<!-- {MARKER}:(0Af[0-9A-Za-z]{{12,15}}):{re.escape(head_sha)} -->")
     for comment in reversed(comments):
-        body = comment.get("body") or ""
-        if MARKER in body:
-            return body.split(f"{MARKER}:")[1].split()[0]
+        if (comment.get("user") or {}).get("login") != "github-actions[bot]":
+            continue
+        match = pattern.search(comment.get("body") or "")
+        if match:
+            return match.group(1)
     return None
 
 
@@ -209,7 +220,7 @@ def deploy(_args):
 
     job_id = validated_job_id()
     if job_id:
-        response = sf_json("project", "deploy", "quick", "--job-id", job_id, "--target-org", ORG, "--wait", "30")
+        response = sf_json("project", "deploy", "quick", f"--job-id={job_id}", "--target-org", ORG, "--wait", "30")
         if (response.get("result") or {}).get("success"):
             summary(f"Quick deploy of validated build `{job_id}` succeeded, with no tests rerun.")
             return
