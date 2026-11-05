@@ -11,6 +11,14 @@ ORG="abcDev"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/../.."
 
+# On Windows, plain "bash" in PowerShell is WSL, which can't see these tools. Use Git Bash.
+for tool in git gh sf; do
+  if ! command -v "$tool" >/dev/null; then
+    echo "$tool not found. Run this from Git Bash, not WSL. Nothing was changed." >&2
+    exit 1
+  fi
+done
+
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "demo" ] && ! git rev-parse --abbrev-ref HEAD | grep -q '^fix/'; then
   echo "Run this from the demo branch or a fix/ branch." >&2
   exit 1
