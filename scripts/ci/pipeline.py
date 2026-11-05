@@ -21,6 +21,8 @@ PLAN = OUT / "plan.json"
 RESULT = OUT / "result.json"
 CLASSES = pathlib.Path("force-app/main/default/classes")
 MARKER = "abc-validated-job"
+# Class names reach a SOQL query in the drift guard, so only plain Apex identifiers pass.
+CLASS_PATH = re.compile(r"force-app/main/default/classes/([A-Za-z][A-Za-z0-9_]*)\.cls(?:-meta\.xml)?")
 
 
 def run(*cmd, check=True):
@@ -75,7 +77,14 @@ def plan(args):
             continue
         (deleted if status == "D" else paths).append(path)
 
-    classes = sorted({pathlib.Path(p).name.split(".")[0] for p in paths if ".cls" in p})
+    classes = set()
+    for path in paths:
+        if ".cls" in path:
+            match = CLASS_PATH.fullmatch(path)
+            if not match:
+                sys.exit(f"Stopped: not a valid Apex class path: {path}")
+            classes.add(match.group(1))
+    classes = sorted(classes)
     tests = select_tests(classes)
     PLAN.write_text(
         json.dumps({"base": args.base, "paths": paths, "classes": classes, "tests": tests}, indent=2),
@@ -114,9 +123,11 @@ def drift(_args):
     drifted = []
     for name in planned["classes"]:
         expected = run("git", "show", f"{planned['base']}:{CLASSES.as_posix()}/{name}.cls", check=False)
-        if name in org_bodies and expected.returncode == 0:
-            if normalise(org_bodies[name]) != normalise(expected.stdout):
-                drifted.append(name)
+        if expected.returncode != 0:
+            continue  # New in this change, so the org has nothing to compare.
+        # A class git has but the org doesn't has drifted too.
+        if name not in org_bodies or normalise(org_bodies[name]) != normalise(expected.stdout):
+            drifted.append(name)
 
     summary("### Drift guard")
     if drifted:
@@ -200,9 +211,10 @@ def validated_job_id():
     repo = os.environ["GITHUB_REPOSITORY"]
     sha = os.environ["GITHUB_SHA"]
     pulls = json.loads(run("gh", "api", f"repos/{repo}/commits/{sha}/pulls").stdout)
-    if not pulls:
+    merged = next((pull for pull in pulls if pull.get("merge_commit_sha") == sha), None)
+    if not merged:
         return None
-    number, head_sha = pulls[0]["number"], pulls[0]["head"]["sha"]
+    number, head_sha = merged["number"], merged["head"]["sha"]
     comments = json.loads(run("gh", "api", f"repos/{repo}/issues/{number}/comments?per_page=100").stdout)
     pattern = re.compile(rf"<!-- {MARKER}:(0Af[0-9A-Za-z]{{12,15}}):{re.escape(head_sha)} -->")
     for comment in reversed(comments):
