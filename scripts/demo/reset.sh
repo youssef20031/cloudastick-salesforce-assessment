@@ -30,6 +30,9 @@ git push --force origin demo-start:refs/heads/demo
 for branch in $(git for-each-ref --format='%(refname:short)' 'refs/heads/fix/*'); do
   git branch -D "$branch"
 done
+for branch in $(git ls-remote --heads origin 'fix/*' | sed 's#.*refs/heads/##'); do
+  git push origin --delete "$branch"
+done
 
 echo "== Restoring the cart classes in abcDev"
 sf project deploy start --target-org "$ORG" --wait 30 \
@@ -37,8 +40,18 @@ sf project deploy start --target-org "$ORG" --wait 30 \
   --source-dir force-app/main/default/classes/abc_CartServiceTest.cls \
   --test-level RunSpecifiedTests --tests abc_CartServiceTest --tests abc_CartRestResourceTest
 
+run_apex() {
+  local log
+  log="$(sf apex run --target-org "$ORG" --file "$1" 2>&1)" || { echo "$log" >&2; exit 1; }
+  if ! grep -q 'Executed successfully' <<<"$log"; then
+    echo "$log" >&2
+    exit 1
+  fi
+  grep -E 'USER_DEBUG.*DEMO' <<<"$log" | sed 's/.*DEBUG|//'
+}
+
 echo "== Removing the demo records"
-sf apex run --target-org "$ORG" --file scripts/demo/teardown.apex | grep -E 'Compiled|Executed|DEMO|Error|error' || true
+run_apex scripts/demo/teardown.apex
 
 if [ "${1:-}" = "--teardown" ]; then
   echo "== Done: demo records removed and not seeded again."
@@ -46,6 +59,6 @@ if [ "${1:-}" = "--teardown" ]; then
 fi
 
 echo "== Seeding the demo records"
-sf apex run --target-org "$ORG" --file scripts/demo/seed.apex | grep -E 'Compiled|Executed|DEMO|Error|error' || true
+run_apex scripts/demo/seed.apex
 
 echo "== Ready."
