@@ -136,6 +136,7 @@ public with sharing class abc_CartService {
 
     /**
      * POST /abc/v1/carts/{cartId}/checkout - the cart becomes a real order.
+     * Stock is checked again here, because it can sell out while a cart waits.
      * EffectiveDate is pulled forward when needed so a cart opened on an earlier
      * day cannot trip the "effective date before order date" validation rule.
      */
@@ -146,6 +147,13 @@ public with sharing class abc_CartService {
         if (itemsOf(cart).isEmpty()) {
             throw abc_ApiException.validationError('An empty cart cannot be checked out.', 'items');
         }
+
+        // The cart holds one line per product, so each line's quantity is what checkout needs.
+        Map<Id, Decimal> quantityByProduct = new Map<Id, Decimal>();
+        for (OrderItem line : itemsOf(cart)) {
+            quantityByProduct.put(line.Product2Id, line.Quantity);
+        }
+        assertStock(quantityByProduct, loadEntries(quantityByProduct.keySet()), new Map<Id, Decimal>());
 
         Order activation = new Order(Id = cart.Id, Status = STATUS_ACTIVATED, abc_Order_Date__c = Date.today());
         if (cart.EffectiveDate == null || cart.EffectiveDate < Date.today()) {

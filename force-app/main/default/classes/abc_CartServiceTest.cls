@@ -431,6 +431,42 @@ private class abc_CartServiceTest {
     }
 
     @IsTest
+    static void checkoutIsRefusedWhenStockSoldOutAfterTheCartWasFilled() {
+        seedCatalogue();
+        Product2 scarce = scarceProduct(5);
+        abc_ApiModels.CreateCartRequest request = cartRequest(customer('mona.hassan@example.com', 'Mona', 'Hassan'));
+        request.items = new List<abc_ApiModels.CartItemRequest>{ line(scarce.Id, 2) };
+        abc_ApiModels.CartDto cart = abc_CartService.createCart(request);
+
+        // The last units sell elsewhere while this cart waits.
+        update new Product2(Id = scarce.Id, abc_Stock_Quantity__c = 0);
+
+        Test.startTest();
+        expectFailure(abc_ApiException.CODE_INSUFFICIENT_STOCK, new Invoker(new CheckoutCall(cart.cartId)));
+        Test.stopTest();
+
+        Assert.areEqual(
+            abc_CartService.STATUS_DRAFT,
+            abc_CartService.getCart(cart.cartId).status,
+            'A refused cart stays open, so the customer can change it.'
+        );
+    }
+
+    @IsTest
+    static void checkoutIsRefusedWhenAProductIsWithdrawnAfterTheCartWasFilled() {
+        seedCatalogue();
+        Product2 scarce = scarceProduct(5);
+        abc_ApiModels.CreateCartRequest request = cartRequest(customer('mona.hassan@example.com', 'Mona', 'Hassan'));
+        request.items = new List<abc_ApiModels.CartItemRequest>{ line(scarce.Id, 1) };
+        abc_ApiModels.CartDto cart = abc_CartService.createCart(request);
+
+        update new Product2(Id = scarce.Id, IsActive = false);
+
+        expectFailure(abc_ApiException.CODE_PRODUCT_NOT_FOUND, new Invoker(new CheckoutCall(cart.cartId)));
+        Assert.areEqual(abc_CartService.STATUS_DRAFT, abc_CartService.getCart(cart.cartId).status);
+    }
+
+    @IsTest
     static void checkingOutTwiceIsRejectedRatherThanReprocessed() {
         seedCatalogue();
         abc_ApiModels.CreateCartRequest request = cartRequest(customer('mona.hassan@example.com', 'Mona', 'Hassan'));

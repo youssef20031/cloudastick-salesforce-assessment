@@ -758,8 +758,9 @@ collection and the environment, set the consumer key and secret, and run the
 - **Client-credentials OAuth.** Chosen so a reviewer needs one token call. A
   production Ionic app should use Authorization Code with PKCE, so that actions
   are attributed to the real customer rather than to a shared integration user.
-- **No stock decrement on checkout.** Stock is validated against the cart but
-  not reserved, so two customers can both be told the last unit is available. A
+- **No stock decrement on checkout.** Stock is checked when items are added and
+  again at checkout, but it is not reserved, so two customers checking out at
+  the same moment can both be told the last unit is available. A
   production build would decrement on activation and hold stock for the life of
   a cart.
 - **The warehouse console lists 1000 orders.** Enough for a single-warehouse
