@@ -394,7 +394,10 @@ After checkout the order is frozen — further `items` calls return
 `Delivered`.
 
 **Failures:** `CART_NOT_FOUND`, `CART_NOT_EDITABLE` (already checked out),
-`VALIDATION_ERROR` (the cart is empty).
+`VALIDATION_ERROR` (the cart is empty), `INSUFFICIENT_STOCK` (a product sold
+out while the cart was open; the cart stays `Draft`, so the app can let the
+customer change the quantity and try again), `PRODUCT_NOT_FOUND` (a product in
+the cart is no longer sold).
 
 ---
 
